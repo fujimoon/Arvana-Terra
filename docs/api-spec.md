@@ -11,7 +11,7 @@ Complete API specification for the Arvana Terra backend. Covers all endpoints, r
 ## ベース情報 / Base Information
 
 ```
-Base URL (Development):  http://localhost:3000/api/v1
+Base URL (Development):  http://localhost:3001/api/v1
 Base URL (Production):   https://api.arvana-terra.jp/api/v1
 Content-Type:            application/json
 Accept:                  application/json
@@ -464,6 +464,179 @@ Authorization: Bearer <accessToken>
   "createdAt": "2024-01-01T00:00:00.000Z"
 }
 ```
+
+---
+
+## 入金管理 API / Payments API
+
+### GET /payments/property/:propertyId
+
+物件の入金一覧取得。
+
+**認証:** 必須
+**ロール:** landlord, homeowner, admin
+
+**クエリパラメータ:**
+
+| パラメータ | 型 | 説明 |
+|-----------|---|------|
+| status | string | `pending` / `paid` / `overdue` |
+| page | number | ページ番号 |
+| limit | number | 件数 |
+
+**レスポンス例 (1件):**
+```json
+{
+  "id": "payment-uuid",
+  "roomId": "room-uuid",
+  "propertyId": "property-uuid",
+  "tenantId": "tenant-uuid",
+  "amount": 85000,
+  "dueDate": "2024-08-01T00:00:00.000Z",
+  "paidDate": "2024-07-31T00:00:00.000Z",
+  "status": "paid",
+  "notes": null,
+  "room": { "roomNumber": "101", "floor": 1 },
+  "tenant": { "name": "佐藤 誠" },
+  "createdAt": "2024-07-01T00:00:00.000Z"
+}
+```
+
+---
+
+### POST /payments
+
+入金記録を作成。
+
+**認証:** 必須
+
+**リクエスト:**
+```json
+{
+  "roomId": "room-uuid",
+  "propertyId": "property-uuid",
+  "tenantId": "tenant-uuid",
+  "amount": 85000,
+  "dueDate": "2024-09-01T00:00:00.000Z",
+  "paidDate": "2024-08-31T00:00:00.000Z",
+  "status": "paid",
+  "notes": null
+}
+```
+
+**レスポンス (201):** 作成された Payment オブジェクト
+
+---
+
+### PATCH /payments/:id
+
+入金ステータス更新。
+
+**リクエスト:**
+```json
+{ "status": "paid", "paidDate": "2024-08-31T00:00:00.000Z" }
+```
+
+---
+
+## 通知 API / Notifications API
+
+### GET /notifications
+
+ログインユーザーの通知一覧取得。
+
+**認証:** 必須
+
+**クエリパラメータ:**
+
+| パラメータ | 型 | 説明 |
+|-----------|---|------|
+| isRead | boolean | `true` (既読のみ) / `false` (未読のみ) |
+| page | number | ページ番号 |
+| limit | number | 件数 |
+
+**レスポンス例 (1件):**
+```json
+{
+  "id": "notification-uuid",
+  "userId": "user-uuid",
+  "title": "家賃支払い期日のお知らせ",
+  "body": "101号室の9月分家賃の支払い期日が3日後です。",
+  "notificationType": "payment_due",
+  "relatedId": "room-uuid",
+  "relatedType": "room",
+  "isRead": false,
+  "createdAt": "2024-08-29T09:00:00.000Z"
+}
+```
+
+---
+
+### PATCH /notifications/:id/read
+
+特定通知を既読にする。
+
+**認証:** 必須
+
+**レスポンス (200):** `{ "success": true }`
+
+---
+
+### PATCH /notifications/read-all
+
+全未読通知を既読にする。
+
+**認証:** 必須
+
+**レスポンス (200):** `{ "success": true, "updatedCount": 5 }`
+
+---
+
+## スマートデバイス API / Smart Devices API
+
+### GET /properties/:propertyId/smart-devices
+
+物件のスマートデバイス一覧取得。
+
+**認証:** 必須
+
+**レスポンス例 (1件):**
+```json
+{
+  "id": "device-uuid",
+  "propertyId": "property-uuid",
+  "roomId": null,
+  "deviceType": "water_meter",
+  "deviceId": "SN-WM-12345",
+  "location": "1F 共用廊下",
+  "readings": [
+    { "date": "2024-08-12", "value": 123.5, "unit": "m3" },
+    { "date": "2024-08-19", "value": 128.2, "unit": "m3" }
+  ],
+  "cameraStatus": null,
+  "lastUpdated": "2024-08-19T08:00:00.000Z"
+}
+```
+
+---
+
+### POST /properties/:propertyId/smart-devices
+
+スマートデバイス登録。
+
+**認証:** 必須
+
+**リクエスト:**
+```json
+{
+  "deviceType": "water_meter",
+  "deviceId": "SN-WM-12345",
+  "location": "1F 共用廊下",
+  "readings": []
+}
+```
+
+**レスポンス (201):** 作成された SmartDeviceData オブジェクト
 
 ---
 
@@ -929,7 +1102,7 @@ SNS 投稿一覧。
 
 ```javascript
 // クライアント接続設定
-const socket = io('ws://localhost:3000/chat', {
+const socket = io('ws://localhost:3001/chat', {
   auth: { token: 'Bearer eyJhbGci...' },
   transports: ['websocket'],
 })
@@ -1007,7 +1180,7 @@ socket.on('new_message', (message) => {
 
 ```javascript
 // 接続
-const notifSocket = io('ws://localhost:3000/notification', {
+const notifSocket = io('ws://localhost:3001/notification', {
   auth: { token: 'Bearer eyJhbGci...' },
 })
 

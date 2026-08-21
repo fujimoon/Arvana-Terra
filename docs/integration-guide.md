@@ -139,7 +139,7 @@ Admin Panel:
 
 ```javascript
 // 接続時に JWT を渡す
-const socket = io('ws://host:3000/chat', {
+const socket = io('ws://host:3001/chat', {
   auth: { token: accessToken },  // "Bearer " プレフィックスは不要
   transports: ['websocket'],
 })
@@ -209,8 +209,8 @@ model SmartDeviceData {
 ```
 スマートデバイス (IoT)
   │── HTTP POST → バックエンドAPI (デバイス認証)
-  │   PATCH /my/properties/:id/equipment/devices/:deviceId/readings
-  │   { value: 128.2, unit: "m3", timestamp: "2024-02-19T08:00:00Z" }
+  │   POST /api/v1/properties/:propertyId/smart-devices
+  │   { deviceType: "water_meter", deviceId: "SN-12345", readings: [...] }
   │
 バックエンド
   │── SmartDeviceData.readings に append
@@ -222,16 +222,16 @@ model SmartDeviceData {
   └── グラフで週次推移を表示
 ```
 
-### 設備グラフ API
+### スマートデバイス API
 
 ```typescript
-// GET /my/properties/:id/equipment/:deviceId/readings?weeks=8
-// 過去8週間の読み取りデータを返す
+// GET /api/v1/properties/:propertyId/smart-devices
+// 物件のスマートデバイス一覧を取得
 
 // Web クライアントでの利用
-const { data: readings } = useQuery({
-  queryKey: ['device-readings', propertyId, deviceId],
-  queryFn: () => equipmentApi.getSmartDeviceReadings(propertyId, deviceId, 8),
+const { data: devices } = useQuery({
+  queryKey: ['smart-devices', propertyId],
+  queryFn: () => smartDevicesApi.getSmartDevices(propertyId),
 })
 
 // Recharts でグラフ表示

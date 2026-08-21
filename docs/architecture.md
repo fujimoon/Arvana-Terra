@@ -20,7 +20,7 @@ Arvana Terra uses a monolithic API architecture centered on a single backend API
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────┐  ┌────────┐  │    │
 │  │  │  Web Client  │  │  Admin Panel │  │   iOS    │  │Android │  │    │
 │  │  │  React/Vite  │  │  React/Vite  │  │  SwiftUI │  │Compose │  │    │
-│  │  │  :5174       │  │  Docker:3001 │  │  iOS 17+ │  │API 34+ │  │    │
+│  │  │  :5174       │  │  Docker:3002 │  │  iOS 17+ │  │API 34+ │  │    │
 │  │  └──────┬───────┘  └──────┬───────┘  └────┬─────┘  └───┬────┘  │    │
 │  │         │                 │                │             │        │    │
 │  └─────────┼─────────────────┼────────────────┼─────────────┼────────┘   │
@@ -35,11 +35,12 @@ Arvana Terra uses a monolithic API architecture centered on a single backend API
 │  │                    arvana-terra-backend                            │   │
 │  │                    Node.js / TypeScript                            │   │
 │  │                    Express.js 4.18                                 │   │
-│  │                    Port: 3000                                      │   │
+│  │                    Port: 3001                                      │   │
 │  │                                                                    │   │
 │  │  ┌────────────────────────────────────────────────────────────┐   │   │
 │  │  │  Route Layer                                               │   │   │
 │  │  │  /auth  /my/lands  /my/properties  /tasks  /chats         │   │   │
+│  │  │  /payments  /notifications  /smart-devices                 │   │   │
 │  │  │  /employees  /vendors  /sns  /admin  /employer             │   │   │
 │  │  └───────────────────────────┬────────────────────────────────┘   │   │
 │  │                              │                                     │   │
@@ -282,7 +283,7 @@ Authorization: Bearer <accessToken>
 ### Socket.io Namespaces
 
 ```
-ws://host:3000
+ws://host:3001
   ├── /chat         チャットメッセージのリアルタイム配信
   └── /notification プッシュ通知のリアルタイム配信
 ```
@@ -365,12 +366,15 @@ User (1) ───── (N) BusinessOpportunity
 | `lands` | `imageUrls String[]`, `tags String[]` → PostgreSQL配列型 |
 | `properties` | `landId` は nullable（土地なし物件も可） |
 | `rooms` | `roomId` が `tenant` テーブルで UNIQUE → 1部屋1入居者 |
+| `payments` | `roomId`, `dueDate`, `paidDate`, `status` (pending/paid/overdue) |
 | `smart_device_data` | `readings Json` → 週次データをJSONBで格納 |
 | `contracts` | `parties Json` → 当事者リストをJSONBで格納 |
 | `chat_messages` | `readBy String[]` → 既読ユーザーIDをPostgreSQL配列で管理 |
 | `tasks` | `isAiSuggested Boolean` → AI提案フラグ |
+| `notifications` | `userId`, `notificationType`, `relatedId`, `relatedType`, `isRead` |
 | `vendors` | `isApproved Boolean` → 管理者承認フラグ |
 | `user_vendors` | UNIQUE(userId, vendorId) → 重複連携防止 |
+| `refresh_tokens` | `token` (UUID), `userId`, `expiresAt` → 使い捨てリフレッシュトークン |
 
 ---
 
@@ -433,9 +437,9 @@ Refresh Token:
 ┌─────────────────────────────────────────────┐
 │  Developer Machine                          │
 │                                             │
-│  node dev (backend) → :3000                 │
+│  node dev (backend) → :3001                 │
 │  vite dev (web)     → :5174                 │
-│  vite dev (admin)   → :3001                 │
+│  vite dev (admin)   → :3002                 │
 │  psql               → :5432                 │
 │  redis-cli          → :6379                 │
 └─────────────────────────────────────────────┘
@@ -454,7 +458,7 @@ Internet
       │
       ├── /          → arvana-terra-web (React SPA)
       ├── /admin      → arvana-terra-admin (Docker + Nginx)
-      └── /api/*      → arvana-terra-backend (:3000)
+      └── /api/*      → arvana-terra-backend (:3001)
                             │
                     ┌───────┴────────┐
                     │                │
@@ -492,7 +496,7 @@ server {
     }
 
     location /api {
-        proxy_pass http://backend:3000;
+        proxy_pass http://backend:3001;
     }
 }
 ```

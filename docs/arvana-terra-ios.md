@@ -34,8 +34,8 @@ Arvana-Terra-iOS は **Swift Package Manager (SPM) のサードパーティ依�
 ```swift
 // src/Config/AppConfig.swift
 struct AppConfig {
-    static let apiBaseURL = "http://localhost:3000/api/v1"
-    static let wsURL = "ws://localhost:3000"
+    static let apiBaseURL = "http://localhost:3001/api/v1"
+    static let wsURL = "ws://localhost:3001"
     static let appName = "Arvana Terra"
     static let appVersion = "1.0.0"
 }
@@ -58,8 +58,10 @@ Arvana-Terra-iOS/
     │   ├── User.swift                 # User, AuthResponse, UserRole
     │   ├── Land.swift                 # Land, LandStatus, CreateLandRequest
     │   ├── Property.swift             # Property, BuildingType, PropertyStatus
-    │   ├── Room.swift                 # Room, RoomStatus, Tenant, Payment
-    │   ├── Equipment.swift            # Equipment, EquipmentStatus, SmartDeviceData
+    │   ├── Room.swift                 # Room, RoomStatus, Tenant
+    │   ├── Payment.swift              # Payment, PaymentStatus, CreatePaymentRequest
+    │   ├── Equipment.swift            # Equipment, EquipmentStatus
+    │   ├── SmartDeviceData.swift      # SmartDeviceData, SmartDeviceReading, DeviceType
     │   ├── Contract.swift             # Contract, ContractType, ContractStatus
     │   ├── Task.swift                 # Task, TaskStatus, TaskPriority
     │   ├── Employee.swift             # Employee
@@ -70,6 +72,7 @@ Arvana-Terra-iOS/
     │   ├── BusinessOpportunity.swift  # BusinessOpportunity
     │   └── Notification.swift         # AppNotification, NotificationType
     ├── Services/                      # API サービス層
+    │   ├── APIService.swift            # 共通 APIService（全エンドポイント）
     │   ├── AuthService.swift
     │   ├── LandService.swift
     │   ├── PropertyService.swift
@@ -88,6 +91,8 @@ Arvana-Terra-iOS/
     │   ├── PropertyListViewModel.swift
     │   ├── PropertyDetailViewModel.swift
     │   ├── RoomListViewModel.swift
+    │   ├── PaymentViewModel.swift
+    │   ├── SmartDeviceViewModel.swift
     │   ├── ChatViewModel.swift
     │   ├── TaskViewModel.swift
     │   └── ...
@@ -110,8 +115,14 @@ Arvana-Terra-iOS/
         │   ├── RoomDetailView.swift
         │   └── PropertyTaskView.swift
         ├── Equipment/
-        │   ├── EquipmentListView.swift
-        │   └── SmartDeviceView.swift
+        │   └── EquipmentListView.swift
+        ├── Payments/
+        │   ├── PaymentPropertySelectorView.swift  # 物件選択（入金・スマートデバイス共用）
+        │   └── PaymentListView.swift              # 入金一覧・入金登録（inline NotificationViewModel）
+        ├── SmartDevices/
+        │   └── SmartDeviceListView.swift          # デバイス一覧・センサーグラフ
+        ├── Notifications/
+        │   └── NotificationListView.swift         # 通知一覧・既読管理（inline NotificationViewModel）
         ├── Chat/
         │   ├── ChatListView.swift         # チャットルーム一覧・新規作成モーダル
         │   └── ChatRoomView.swift         # メッセージ表示・送信（3秒 HTTP ポーリング）
@@ -205,11 +216,29 @@ TabView
 | 部屋一覧 | フロア別部屋リスト・ステータス表示 |
 | 部屋詳細 | 部屋情報・入居者情報・支払い履歴 |
 | 設備一覧 | 設備カテゴリ別一覧・ステータス色分け |
-| スマートデバイス | 水道・電気メーター読み取り値グラフ |
 | 契約書一覧 | 物件に紐づく契約書 |
 | 物件チャット | チャットルーム一覧 |
 | 物件タスク | タスク一覧（AI提案タグ付き） |
 | 従業員一覧 | 従業員リスト |
+
+### 入金管理 / Payment Management
+
+| スクリーン | 説明 |
+|-----------|------|
+| 物件選択 | 入金管理・スマートデバイスへの物件選択（`PaymentPropertySelectorView`） |
+| 入金一覧 | 物件の入金履歴一覧・ステータスバッジ・入金登録フォーム（`PaymentListView`） |
+
+### スマートデバイス / Smart Devices
+
+| スクリーン | 説明 |
+|-----------|------|
+| デバイス一覧 | 物件のスマートデバイス一覧・センサーグラフ（水道・電気メーター）（`SmartDeviceListView`） |
+
+### 通知 / Notifications
+
+| スクリーン | 説明 |
+|-----------|------|
+| 通知一覧 | 全通知の一覧・タップで既読・「すべて既読」ボタン（`NotificationListView`） |
 
 ### チャット / Chat
 
@@ -498,7 +527,7 @@ open Arvana-Terra-iOS/Arvana-Terra-iOS.xcodeproj
 cd Arvana-Terra-iOS
 open Arvana-Terra-iOS.xcodeproj
 
-# バックエンドサーバーが localhost:3000 で起動していることを確認
+# バックエンドサーバーが localhost:3001 で起動していることを確認
 # Config/AppConfig.swift の apiBaseURL を確認・変更
 ```
 

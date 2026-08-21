@@ -12,20 +12,20 @@ The primary web client application for landlords and homeowners. Built with Reac
 
 | パッケージ | バージョン | 用途 |
 |-----------|-----------|------|
-| React | 18.3.1 | UI フレームワーク |
-| TypeScript | 5.7.2 | 言語 |
-| Vite | 5.4.11 | ビルドツール・開発サーバー |
-| Tailwind CSS | 3.4.17 | ユーティリティファーストCSS |
-| React Router DOM | 6.28.1 | クライアントサイドルーティング |
-| Zustand | 4.5.5 | グローバル状態管理 |
-| TanStack Query | 5.62.7 | サーバー状態管理・キャッシュ |
-| Axios | 1.7.9 | HTTP クライアント |
-| socket.io-client | 4.8.1 | WebSocket クライアント |
-| React Hook Form | 7.54.2 | フォーム管理 |
-| Zod | 3.24.1 | バリデーションスキーマ |
-| Recharts | 2.15.0 | グラフ・チャート |
-| @heroicons/react | 2.2.0 | アイコン |
-| date-fns | 3.6.0 | 日付ユーティリティ |
+| React | 19.x | UI フレームワーク |
+| TypeScript | 6.x | 言語 |
+| Vite | 8.x | ビルドツール・開発サーバー |
+| Tailwind CSS | 4.x | ユーティリティファーストCSS |
+| React Router DOM | 7.x | クライアントサイドルーティング |
+| Zustand | 5.x | グローバル状態管理 |
+| TanStack Query | 5.x | サーバー状態管理・キャッシュ |
+| Axios | 1.x | HTTP クライアント |
+| socket.io-client | 4.x | WebSocket クライアント |
+| React Hook Form | 7.x | フォーム管理 |
+| Zod | 3.x | バリデーションスキーマ |
+| Recharts | 2.x | グラフ・チャート |
+| @heroicons/react | 2.x | アイコン |
+| date-fns | 3.x | 日付ユーティリティ |
 
 ---
 
@@ -41,11 +41,14 @@ arvana-terra-web/
 │   │   ├── auth.ts            # 認証 API
 │   │   ├── lands.ts           # 土地 API
 │   │   ├── properties.ts      # 物件 API
-│   │   ├── rooms.ts           # 部屋・支払い API
-│   │   ├── equipment.ts       # 設備・スマートデバイス API
+│   │   ├── rooms.ts           # 部屋 API
+│   │   ├── equipment.ts       # 設備 API
+│   │   ├── payments.ts        # 入金管理 API
+│   │   ├── smartDevices.ts    # スマートデバイス API
 │   │   ├── contracts.ts       # 契約書 API
 │   │   ├── tasks.ts           # タスク API
 │   │   ├── employees.ts       # 従業員 API
+│   │   ├── notifications.ts   # 通知 API
 │   │   └── chats.ts           # チャット API
 │   ├── components/
 │   │   ├── ui/                # 汎用UIコンポーネント
@@ -66,6 +69,10 @@ arvana-terra-web/
 │   │   ├── lands/             # 土地管理ページ
 │   │   ├── properties/        # 物件管理ページ
 │   │   ├── rooms/             # 部屋管理ページ
+│   │   ├── payments/          # 入金管理ページ
+│   │   │   └── PaymentsPage.tsx   # 物件別入金一覧・入金登録
+│   │   ├── smartDevices/      # スマートデバイス管理ページ
+│   │   │   └── SmartDevicesPage.tsx # デバイス一覧・センサーグラフ
 │   │   ├── employees/         # 従業員管理ページ
 │   │   ├── chat/              # チャットページ
 │   │   │   ├── ChatListPage.tsx   # チャットルーム一覧（トピック一覧）
@@ -73,8 +80,6 @@ arvana-terra-web/
 │   │   ├── schedule/          # スケジュール管理ページ
 │   │   ├── settings/          # 設定ページ
 │   │   └── public/            # 公開ページ（認証不要）
-│   ├── hooks/
-│   │   └── useChat.ts         # Socket.io チャットフック（join/send/receive）
 │   ├── store/
 │   │   ├── auth.store.ts      # 認証グローバル状態
 │   │   ├── chat.store.ts      # チャット状態
@@ -147,6 +152,18 @@ arvana-terra-web/
 | `/my/properties/:id/chat` | 物件チャット一覧 | `?type=property&name=...` で絞り込み |
 | `/my/employees/:id/chat` | 従業員チャット一覧 | `?type=employee&name=...` で絞り込み |
 | `/my/chat/:roomId` | チャットルーム | リアルタイムメッセージ画面（Socket.io） |
+
+#### 入金管理 / Payment Management
+
+| URL | ページ名 | 説明 |
+|-----|---------|------|
+| `/my/payments` | 入金管理 | 物件選択 → 入金一覧・入金登録（`PaymentsPage`） |
+
+#### スマートデバイス管理 / Smart Device Management
+
+| URL | ページ名 | 説明 |
+|-----|---------|------|
+| `/my/smart-devices` | スマートデバイス | 物件選択 → デバイス一覧・センサーグラフ（`SmartDevicesPage`） |
 
 #### タスク管理 / Task Management
 
@@ -330,7 +347,7 @@ const updateLand = useMutation({
 
 ```typescript
 // src/api/client.ts
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1'
 
 // インターセプター:
 // Request: localStorage から accessToken を取得して Authorization ヘッダーに付与
@@ -369,7 +386,7 @@ export const propertiesApi = {
 
 ```typescript
 // src/hooks/useSocket.ts
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000'
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3001'
 
 export function useSocket() {
   // Socket.io 接続設定
@@ -454,6 +471,12 @@ export function useChatSocket(topicId: string) {
         <Route path="/my/properties/:id/tasks" element={<PropertyTasksPage />} />
         <Route path="/my/properties/:id/employees" element={<EmployeesPage />} />
 
+        {/* 入金管理 */}
+        <Route path="/my/payments" element={<PaymentsPage />} />
+
+        {/* スマートデバイス */}
+        <Route path="/my/smart-devices" element={<SmartDevicesPage />} />
+
         {/* その他 */}
         <Route path="/tasks" element={<AllTasksPage />} />
         <Route path="/visualization" element={<VisualizationPage />} />
@@ -510,8 +533,8 @@ theme: {
 
 ```env
 # .env.local (開発時)
-VITE_API_BASE_URL=http://localhost:3000/api/v1
-VITE_WS_URL=ws://localhost:3000
+VITE_API_BASE_URL=http://localhost:3001/api/v1
+VITE_WS_URL=ws://localhost:3001
 
 # .env.production
 VITE_API_BASE_URL=https://api.arvana-terra.jp/api/v1

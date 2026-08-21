@@ -399,7 +399,7 @@ model AssetValuation {
 
 ## APIエンドポイント / API Endpoints
 
-### Base URL: `http://localhost:3000/api/v1`
+### Base URL: `http://localhost:3001/api/v1`
 
 ### 認証 / Authentication
 
@@ -636,13 +636,35 @@ model AssetValuation {
 
 ---
 
+### 入金管理 / Payments
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/payments/property/:propertyId` | Required | 物件の入金一覧 |
+| POST | `/payments` | Required | 入金記録作成 |
+| PATCH | `/payments/:id` | Required | 入金記録更新 |
+| DELETE | `/payments/:id` | Required | 入金記録削除 |
+
+---
+
+### スマートデバイス / Smart Devices
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/properties/:propertyId/smart-devices` | Required | デバイス一覧 |
+| POST | `/properties/:propertyId/smart-devices` | Required | デバイス登録 |
+| PATCH | `/properties/:propertyId/smart-devices/:id` | Required | デバイス更新・readings追加 |
+| DELETE | `/properties/:propertyId/smart-devices/:id` | Required | デバイス削除 |
+
+---
+
 ### 通知 / Notifications
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/my/notifications` | Required | 通知一覧 |
-| PATCH | `/my/notifications/:id/read` | Required | 既読にする |
-| PATCH | `/my/notifications/read-all` | Required | 全て既読にする |
+| GET | `/notifications` | Required | 通知一覧 |
+| PATCH | `/notifications/:id/read` | Required | 既読にする |
+| PATCH | `/notifications/read-all` | Required | 全て既読にする |
 
 ---
 
@@ -823,11 +845,11 @@ JWT_SECRET="minimum-32-character-secret-key-here"
 JWT_EXPIRES_IN="15m"
 
 # サーバー設定
-PORT=3000
+PORT=3001
 NODE_ENV=development
 
 # CORS (カンマ区切りで複数オリジン指定可能)
-ALLOWED_ORIGINS="http://localhost:5174,http://localhost:3001"
+ALLOWED_ORIGINS="http://localhost:5174,http://localhost:3002"
 
 # ファイルアップロード
 UPLOAD_DIR="./uploads"
@@ -870,7 +892,7 @@ npm run prisma:seed
 
 # 開発サーバー起動 (ts-node-dev によるホットリロード)
 npm run dev
-# → Server running on port 3000
+# → Server running on port 3001
 # → Database connected
 # → Redis connected
 # → Socket.io initialized

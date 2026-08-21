@@ -2,9 +2,9 @@
 
 ## 概要 / Overview
 
-Arvana Terra の Android 向けネイティブアプリです。Kotlin/Jetpack Compose で構築され、MVVM + Repository パターンを採用しています。依存性注入に Hilt、HTTP 通信に Retrofit2 を使用します。チャット機能は 3 秒間隔の HTTP ポーリングで実装しており、socket.io-client への依存なしに動作します。
+Arvana Terra の Android 向けネイティブアプリです。Kotlin/Jetpack Compose で構築され、MVVM + Repository パターンを採用しています。依存性注入に Hilt、HTTP 通信に Retrofit2 を使用します。チャット機能は 3 秒間隔の HTTP ポーリングで実装し、プッシュ通知にはリアルタイム性のために socket.io-client を使用しています。
 
-Native Android app for Arvana Terra. Built with Kotlin/Jetpack Compose using MVVM + Repository pattern. Uses Hilt for DI and Retrofit2 for HTTP. Chat feature uses 3-second HTTP polling (no socket.io-client dependency required).
+Native Android app for Arvana Terra. Built with Kotlin/Jetpack Compose using MVVM + Repository pattern. Uses Hilt for DI, Retrofit2 for HTTP, and socket.io-client for real-time push notifications. Chat uses 3-second HTTP polling.
 
 ---
 
@@ -91,8 +91,17 @@ Arvana-Terra-Android/
 │       │   │       └── SnsModels.kt
 │       │   ├── model/
 │       │   │   └── Chat.kt             # ChatRoom, ChatMessage, ChatUserRef, CreateChatRoomRequest
+│       │   ├── model/
+│       │   │   ├── Chat.kt             # ChatRoom, ChatMessage, ChatUserRef, CreateChatRoomRequest
+│       │   │   ├── Payment.kt          # Payment, PaymentStatus, CreatePaymentRequest
+│       │   │   ├── SmartDevice.kt      # SmartDeviceData, SmartDeviceReading, DeviceType
+│       │   │   └── AppNotification.kt  # AppNotification, NotificationType
 │       │   ├── remote/
-│       │   │   └── ChatApiService.kt   # チャット専用 Retrofit インターフェース（Hilt 提供）
+│       │   │   ├── AuthApiService.kt   # 認証 Retrofit インターフェース
+│       │   │   ├── ChatApiService.kt   # チャット専用 Retrofit インターフェース
+│       │   │   ├── PaymentApiService.kt    # 入金管理 Retrofit インターフェース
+│       │   │   ├── SmartDeviceApiService.kt # スマートデバイス Retrofit インターフェース
+│       │   │   └── NotificationApiService.kt # 通知 Retrofit インターフェース
 │       │   ├── local/
 │       │   │   └── TokenDataStore.kt  # DataStore Preferences
 │       │   └── repository/
@@ -105,11 +114,11 @@ Arvana-Terra-Android/
 │       │       ├── ChatRepository.kt
 │       │       └── VendorRepository.kt
 │       ├── di/
-│       │   ├── NetworkModule.kt       # Retrofit, OkHttp Hilt モジュール
+│       │   ├── NetworkModule.kt       # Retrofit, OkHttp, 全 ApiService Hilt モジュール
 │       │   ├── RepositoryModule.kt    # Repository Hilt モジュール
 │       │   └── DataStoreModule.kt     # DataStore Hilt モジュール
 │       ├── socket/
-│       │   └── SocketManager.kt       # socket.io-client 管理
+│       │   └── ChatSocketService.kt   # socket.io-client 管理（通知受信用）
 │       └── ui/
 │           ├── navigation/
 │           │   └── NavGraph.kt         # Compose Navigation グラフ
@@ -138,6 +147,15 @@ Arvana-Terra-Android/
 │           ├── equipment/
 │           │   ├── EquipmentScreen.kt
 │           │   └── EquipmentViewModel.kt
+│           ├── payments/
+│           │   ├── PaymentListScreen.kt  # 入金一覧・入金登録フォーム
+│           │   └── PaymentViewModel.kt   # @HiltViewModel
+│           ├── smartdevices/
+│           │   ├── SmartDeviceScreen.kt  # デバイス一覧・センサーグラフ
+│           │   └── SmartDeviceViewModel.kt # @HiltViewModel
+│           ├── notifications/
+│           │   ├── NotificationScreen.kt  # 通知一覧・既読管理
+│           │   └── NotificationViewModel.kt # @HiltViewModel
 │           ├── chat/
 │           │   ├── ChatListScreen.kt   # チャットルーム一覧・新規作成ダイアログ
 │           │   ├── ChatRoomScreen.kt   # メッセージ表示・送信（3秒ポーリング）
@@ -153,12 +171,15 @@ Arvana-Terra-Android/
 │           │   ├── TaskListScreen.kt
 │           │   └── TaskViewModel.kt
 │           ├── settings/
-│           │   └── SettingsScreen.kt
+│           │   ├── SettingsScreen.kt
+│           │   └── SettingsViewModel.kt
 │           └── components/
 │               ├── StatusBadge.kt
+│               ├── AvatarImage.kt
 │               ├── PropertyCard.kt
 │               ├── LandCard.kt
-│               └── LoadingIndicator.kt
+│               ├── LoadingScreen.kt
+│               └── ErrorScreen.kt
 ├── build.gradle.kts
 ├── settings.gradle.kts
 └── gradle.properties
@@ -204,8 +225,8 @@ PropertyListScreen
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val BASE_URL = "http://10.0.2.2:3000/api/v1/"
-    // 実機テスト: "http://192.168.x.x:3000/api/v1/"
+    private const val BASE_URL = "http://10.0.2.2:3001/api/v1/"
+    // 実機テスト: "http://192.168.x.x:3001/api/v1/"
     // 本番: "https://api.arvana-terra.jp/api/v1/"
 
     @Provides
@@ -464,6 +485,15 @@ sealed class Screen(val route: String) {
     object EquipmentList : Screen("properties/{propertyId}/equipment")
     object TaskList : Screen("properties/{propertyId}/tasks")
 
+    // 入金管理
+    object PaymentList : Screen("properties/{propertyId}/payments")
+
+    // スマートデバイス
+    object SmartDevices : Screen("properties/{propertyId}/smart-devices")
+
+    // 通知センター
+    object Notifications : Screen("notifications")
+
     // チャット（type/targetId/targetName で対象を指定、roomId/roomTitle でルーム遷移）
     object ChatList : Screen("chat-list/{type}/{targetId}/{targetName}")
     object ChatRoom : Screen("chat-room/{roomId}/{roomTitle}")
@@ -496,6 +526,9 @@ sealed class Screen(val route: String) {
 | 部屋詳細 | `properties/{id}/rooms/{rid}` | 部屋・入居者・支払い |
 | 設備一覧 | `properties/{id}/equipment` | カテゴリ別設備リスト |
 | タスク一覧 | `properties/{id}/tasks` | タスク一覧・AI提案 |
+| 入金一覧 | `properties/{id}/payments` | 入金履歴・入金登録 |
+| スマートデバイス | `properties/{id}/smart-devices` | デバイス一覧・センサーグラフ |
+| 通知センター | `notifications` | 全通知一覧・既読管理 |
 | チャット一覧 | `chat-list/{type}/{targetId}/{targetName}` | 土地・物件・従業員別チャットルーム一覧 |
 | チャット詳細 | `chat-room/{roomId}/{roomTitle}` | メッセージ表示・送信（3秒 HTTP ポーリング） |
 | SNSフィード | `sns` | 投稿フィード |
@@ -752,6 +785,8 @@ fun loginScreen_displaysEmailAndPasswordFields() {
                    │         ├── 部屋 → RoomListScreen → RoomDetailScreen
                    │         ├── 設備 → EquipmentScreen
                    │         ├── タスク → TaskListScreen
+                   │         ├── 入金管理 → PaymentListScreen
+                   │         ├── スマートデバイス → SmartDeviceScreen
                    │         └── チャット → ChatRoomScreen
                    │
                    ├── チャット (ChatListScreen)
@@ -761,4 +796,5 @@ fun loginScreen_displaysEmailAndPasswordFields() {
                    │    └── SnsDetailScreen
                    │
                    └── 設定 (SettingsScreen)
+                        └── 通知センター → NotificationScreen
 ```
