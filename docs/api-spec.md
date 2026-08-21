@@ -526,66 +526,153 @@ Authorization: Bearer <accessToken>
 
 ## チャット API / Chat API
 
-### GET /chats/:id/messages
+チャット機能は「土地チャット」「物件チャット」「従業員チャット」の3種類をサポートします。トピック（ChatRoom）単位でチャットを作成し、Socket.io によるリアルタイム通信を提供します。
 
-チャットメッセージ一覧（ページネーション）。
+### GET /chats?type={type}&targetId={id}
+
+チャットルーム一覧取得。
+
+**認証:** 必須
+
+| クエリパラメータ | 型 | 必須 | 説明 |
+|--------------|---|:---:|------|
+| type | string | ✓ | `land` / `property` / `employee` |
+| targetId | string | ✓ | 土地ID / 物件ID / 従業員ID |
 
 **レスポンス (200):**
 ```json
 {
+  "success": true,
   "data": [
     {
-      "id": "message-uuid",
-      "chatRoomId": "chatroom-uuid",
-      "senderId": "user-uuid",
-      "sender": {
-        "id": "user-uuid",
-        "name": "田中 太郎",
-        "profileImageUrl": "/uploads/profile.jpg"
-      },
-      "content": "明日の点検について確認したいのですが",
-      "messageType": "text",
-      "fileUrl": null,
-      "readBy": ["user-uuid-1", "user-uuid-2"],
-      "createdAt": "2024-02-20T14:30:00.000Z",
-      "updatedAt": "2024-02-20T14:30:00.000Z"
+      "id": "chatroom-cuid",
+      "type": "land",
+      "title": "外壁修繕について",
+      "description": "2024年秋の外壁塗装工事に関する情報共有",
+      "landId": "land-001",
+      "propertyId": null,
+      "employeeId": null,
+      "createdById": "user-cuid",
+      "createdBy": { "id": "user-cuid", "name": "田中 一郎" },
+      "messages": [
+        {
+          "id": "msg-cuid",
+          "chatRoomId": "chatroom-cuid",
+          "senderId": "user-cuid",
+          "sender": { "id": "user-cuid", "name": "田中 一郎" },
+          "content": "業者の見積もりが届きました",
+          "createdAt": "2024-08-20T14:30:00.000Z"
+        }
+      ],
+      "_count": { "messages": 12 },
+      "createdAt": "2024-08-01T10:00:00.000Z",
+      "updatedAt": "2024-08-20T14:30:00.000Z"
     }
-  ],
-  "total": 45,
-  "page": 1,
-  "limit": 20,
-  "totalPages": 3
+  ]
 }
 ```
 
 ---
 
-### POST /chats/:id/participants
+### POST /chats
 
-チャット参加者を追加。
+チャットルーム作成。
+
+**認証:** 必須
 
 **リクエスト:**
 ```json
 {
-  "userId": "target-user-uuid"
+  "type": "land",
+  "title": "外壁修繕について",
+  "description": "2024年秋の外壁塗装工事に関する情報共有",
+  "landId": "land-001"
 }
 ```
 
-**レスポンス (201):**
+| フィールド | 型 | 必須 | 説明 |
+|-----------|---|:---:|------|
+| type | string | ✓ | `land` / `property` / `employee` |
+| title | string | ✓ | チャットルーム名（トピック） |
+| description | string | - | 説明 |
+| landId | string | - | type=land の場合に指定 |
+| propertyId | string | - | type=property の場合に指定 |
+| employeeId | string | - | type=employee の場合に指定 |
+
+**レスポンス (201):** 作成された ChatRoom オブジェクト
+
+---
+
+### GET /chats/:id
+
+チャットルーム詳細取得。
+
+**認証:** 必須
+
+**レスポンス (200):**
 ```json
 {
-  "id": "participant-uuid",
-  "chatRoomId": "chatroom-uuid",
-  "userId": "target-user-uuid",
-  "user": {
-    "id": "target-user-uuid",
-    "name": "鈴木 次郎",
-    "profileImageUrl": null
-  },
-  "role": "member",
-  "joinedAt": "2024-02-20T15:00:00.000Z"
+  "success": true,
+  "data": {
+    "id": "chatroom-cuid",
+    "type": "land",
+    "title": "外壁修繕について",
+    "createdBy": { "id": "user-cuid", "name": "田中 一郎" },
+    "land": { "id": "land-001", "name": "奈良市東大寺周辺 売地" },
+    "property": null,
+    "employee": null,
+    "createdAt": "2024-08-01T10:00:00.000Z",
+    "updatedAt": "2024-08-20T14:30:00.000Z"
+  }
 }
 ```
+
+---
+
+### GET /chats/:id/messages
+
+チャットメッセージ一覧（ページネーション）。
+
+**認証:** 必須
+
+**クエリパラメータ:** `page` (デフォルト: 1), `limit` (デフォルト: 50)
+
+**レスポンス (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "messages": [
+      {
+        "id": "msg-cuid",
+        "chatRoomId": "chatroom-cuid",
+        "senderId": "user-cuid",
+        "sender": { "id": "user-cuid", "name": "田中 一郎" },
+        "content": "業者の見積もりが届きました",
+        "createdAt": "2024-08-20T14:30:00.000Z"
+      }
+    ],
+    "total": 45,
+    "page": 1,
+    "limit": 50
+  }
+}
+```
+
+---
+
+### POST /chats/:id/messages
+
+メッセージ送信（HTTP フォールバック）。Socket.io が利用できない場合に使用。
+
+**認証:** 必須
+
+**リクエスト:**
+```json
+{ "content": "業者の見積もりが届きました" }
+```
+
+**レスポンス (201):** 作成された ChatMessage オブジェクト。また Socket.io `/chat` 名前空間の `room:{id}` ルームへ `new_message` イベントを broadcast。
 
 ---
 
@@ -848,54 +935,47 @@ const socket = io('ws://localhost:3000/chat', {
 })
 ```
 
-### /chat Namespace - クライアント → サーバー
-
-#### join_chat
-
-チャットルームに参加する。
+### /chat Namespace - 接続
 
 ```javascript
-socket.emit('join_chat', 'chatroom-uuid-string')
+// バックエンドポート: 3001
+const socket = io('http://localhost:3001/chat', {
+  transports: ['websocket', 'polling'],
+})
 ```
 
-**サーバー処理:**
-- DB で chatParticipant を確認
-- 参加者の場合: `socket.join('chat:<chatRoomId>')` を実行
-- 非参加者の場合: `error` イベントを返す
+### /chat Namespace - クライアント → サーバー
+
+#### join_room
+
+チャットルームに参加（ルームの Socket.io room に join）。
+
+```javascript
+socket.emit('join_room', 'chatroom-cuid')
+```
 
 ---
 
-#### leave_chat
+#### leave_room
 
-チャットルームから退出する。
+チャットルームから退出。
 
 ```javascript
-socket.emit('leave_chat', 'chatroom-uuid-string')
+socket.emit('leave_room', 'chatroom-cuid')
 ```
 
 ---
 
 #### send_message
 
-メッセージを送信する。
+メッセージを送信する（DB保存 + 同ルーム全員にブロードキャスト）。
 
 ```javascript
 socket.emit('send_message', {
-  chatRoomId: 'chatroom-uuid',
+  roomId: 'chatroom-cuid',
   content: 'メッセージ内容',
-  messageType: 'text'  // 'text' | 'image' | 'file'
-})
-```
-
----
-
-#### typing
-
-タイピング中の通知。
-
-```javascript
-socket.emit('typing', {
-  chatRoomId: 'chatroom-uuid'
+  senderId: 'user-cuid',
+  senderName: '田中 一郎'
 })
 ```
 
@@ -905,76 +985,19 @@ socket.emit('typing', {
 
 #### new_message
 
-新着メッセージ通知（チャットルーム全員に broadcast）。
+新着メッセージ通知（同ルーム全員に broadcast）。
 
 ```javascript
 socket.on('new_message', (message) => {
   // message の型:
   {
-    id: 'message-uuid',
-    chatRoomId: 'chatroom-uuid',
-    senderId: 'user-uuid',
-    sender: {
-      id: 'user-uuid',
-      name: '田中 太郎',
-      profileImageUrl: '/uploads/profile.jpg'
-    },
+    id: 'msg-cuid',
+    chatRoomId: 'chatroom-cuid',
+    senderId: 'user-cuid',
+    sender: { id: 'user-cuid', name: '田中 一郎' },
     content: 'メッセージ内容',
-    messageType: 'text',
-    fileUrl: null,
-    readBy: ['user-uuid-sender'],
-    createdAt: '2024-02-20T14:30:00.000Z',
-    updatedAt: '2024-02-20T14:30:00.000Z'
+    createdAt: '2024-08-20T14:30:00.000Z'
   }
-})
-```
-
----
-
-#### user_joined
-
-ユーザーがチャットルームに参加した通知。
-
-```javascript
-socket.on('user_joined', ({ chatRoomId, userId }) => {
-  console.log(`User ${userId} joined room ${chatRoomId}`)
-})
-```
-
----
-
-#### user_left
-
-ユーザーがチャットルームを退出した通知。
-
-```javascript
-socket.on('user_left', ({ chatRoomId, userId }) => {
-  console.log(`User ${userId} left room ${chatRoomId}`)
-})
-```
-
----
-
-#### user_typing
-
-タイピング中通知（送信者以外の全員に broadcast）。
-
-```javascript
-socket.on('user_typing', ({ userId, chatRoomId }) => {
-  // 「田中さんが入力中...」などの表示
-})
-```
-
----
-
-#### error
-
-エラー通知。
-
-```javascript
-socket.on('error', ({ message }) => {
-  console.error('Socket error:', message)
-  // 例: 'Not a participant of this chat room'
 })
 ```
 

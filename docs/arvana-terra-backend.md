@@ -300,39 +300,44 @@ model Contract {
 }
 ```
 
-#### ChatRoom / ChatParticipant / ChatMessage
+#### ChatRoom / ChatMessage
 
 ```prisma
-model ChatRoom {
-  id          String       @id @default(uuid())
-  type        ChatRoomType # property / land / employee / direct
-  propertyId  String?
-  landId      String?
-  name        String
-  topic       String?
-  description String?      @db.Text
-  createdBy   String       # User.id
+enum ChatRoomType {
+  land       # 土地チャット
+  property   # 物件チャット
+  employee   # 従業員チャット
 }
 
-model ChatParticipant {
-  id         String              @id @default(uuid())
-  chatRoomId String
-  userId     String
-  role       ChatParticipantRole @default(member)
-  joinedAt   DateTime            @default(now())
-  @@unique([chatRoomId, userId])
+model ChatRoom {
+  id          String       @id @default(cuid())
+  type        ChatRoomType
+  title       String       # トピック名
+  description String?      @db.Text
+  landId      String?      # type=land の場合
+  propertyId  String?      # type=property の場合
+  employeeId  String?      # type=employee の場合
+  createdById String       # 作成者 User.id
+  messages    ChatMessage[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }
 
 model ChatMessage {
-  id          String      @id @default(uuid())
-  chatRoomId  String
-  senderId    String
-  content     String      @db.Text
-  messageType MessageType @default(text)
-  fileUrl     String?
-  readBy      String[]    @default([])  # 既読ユーザーIDの配列
+  id         String   @id @default(cuid())
+  chatRoomId String
+  senderId   String   # 送信者 User.id
+  content    String   @db.Text
+  createdAt  DateTime @default(now())
 }
 ```
+
+**リレーション:**
+- `Land.chatRooms`: 土地に紐づくチャットルーム一覧
+- `Property.chatRooms`: 物件に紐づくチャットルーム一覧
+- `Employee.chatRooms`: 従業員に紐づくチャットルーム一覧
+- `User.chatRoomsCreated`: ユーザーが作成したチャットルーム（`@relation("ChatRoomsCreated")`）
+- `User.messagesSent`: ユーザーが送信したメッセージ（`@relation("MessagesSent")`）
 
 #### Task (業務タスク)
 
@@ -562,14 +567,11 @@ model AssetValuation {
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
+| GET | `/chats?type={type}&targetId={id}` | Required | チャットルーム一覧（type: land/property/employee） |
+| POST | `/chats` | Required | チャットルーム作成 |
 | GET | `/chats/:id` | Required | チャットルーム詳細 |
-| GET | `/chats/:id/messages` | Required | メッセージ一覧（ページネーション） |
-| POST | `/chats/:id/messages` | Required | メッセージ送信（REST） |
-| GET | `/chats/:id/participants` | Required | 参加者一覧 |
-| POST | `/chats/:id/participants` | Required | 参加者追加 |
-| DELETE | `/chats/:id/participants/:pid` | Required | 参加者削除 |
-| GET | `/employees/chats` | Required | 従業員チャット一覧 |
-| POST | `/employees/chats` | Required | 従業員チャット作成 |
+| GET | `/chats/:id/messages` | Required | メッセージ一覧（ページネーション: page, limit） |
+| POST | `/chats/:id/messages` | Required | メッセージ送信（HTTP フォールバック） |
 
 ---
 
@@ -686,24 +688,23 @@ model AssetValuation {
 
 ### /chat Namespace
 
+Socket.io 名前空間: `/chat`（URL: `http://localhost:3001/chat`）
+
+各チャットルームは `room:{chatRoomId}` という Socket.io room として管理されます。
+
 **クライアント送信イベント (Client → Server)**
 
 | Event | Payload | Description |
 |-------|---------|-------------|
-| `join_chat` | `chatRoomId: string` | チャットルームに参加 |
-| `leave_chat` | `chatRoomId: string` | チャットルームを退出 |
-| `send_message` | `{ chatRoomId, content, messageType? }` | メッセージ送信 |
-| `typing` | `{ chatRoomId }` | タイピング中通知 |
+| `join_room` | `roomId: string` | チャットルームに参加（`socket.join('room:{id}')`） |
+| `leave_room` | `roomId: string` | チャットルームを退出 |
+| `send_message` | `{ roomId, content, senderId, senderName }` | メッセージ送信（DB保存 + broadcast） |
 
 **サーバー送信イベント (Server → Client)**
 
 | Event | Payload | Trigger |
 |-------|---------|---------|
-| `new_message` | ChatMessage with sender info | 新着メッセージ |
-| `user_joined` | `{ chatRoomId, userId }` | ユーザー参加時 |
-| `user_left` | `{ chatRoomId, userId }` | ユーザー退出時 |
-| `user_typing` | `{ userId, chatRoomId }` | タイピング中通知 |
-| `error` | `{ message: string }` | エラー発生時 |
+| `new_message` | `{ id, chatRoomId, senderId, sender: {id, name}, content, createdAt }` | 新着メッセージ |
 
 ### /notification Namespace
 

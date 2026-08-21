@@ -2,9 +2,9 @@
 
 ## 概要 / Overview
 
-Arvana Terra の Android 向けネイティブアプリです。Kotlin/Jetpack Compose で構築され、MVVM + Repository パターンを採用しています。依存性注入に Hilt、HTTP 通信に Retrofit2、WebSocket に socket.io-client (Android) を使用します。
+Arvana Terra の Android 向けネイティブアプリです。Kotlin/Jetpack Compose で構築され、MVVM + Repository パターンを採用しています。依存性注入に Hilt、HTTP 通信に Retrofit2 を使用します。チャット機能は 3 秒間隔の HTTP ポーリングで実装しており、socket.io-client への依存なしに動作します。
 
-Native Android app for Arvana Terra. Built with Kotlin/Jetpack Compose using MVVM + Repository pattern. Uses Hilt for dependency injection, Retrofit2 for HTTP, and socket.io-client for Android WebSocket communication.
+Native Android app for Arvana Terra. Built with Kotlin/Jetpack Compose using MVVM + Repository pattern. Uses Hilt for DI and Retrofit2 for HTTP. Chat feature uses 3-second HTTP polling (no socket.io-client dependency required).
 
 ---
 
@@ -19,7 +19,7 @@ Native Android app for Arvana Terra. Built with Kotlin/Jetpack Compose using MVV
 | Retrofit2 | 最新 | REST API HTTP クライアント |
 | OkHttp3 | 最新 | HTTP クライアント基盤 + ロギングインターセプター |
 | Gson | 最新 | JSON シリアライズ/デシリアライズ |
-| socket.io-client | 最新 | WebSocket / Socket.io |
+| socket.io-client | 最新 | WebSocket / Socket.io（通知用） ※チャットは HTTP ポーリング |
 | Coroutines | 最新 | 非同期処理 |
 | ViewModel / LiveData | Lifecycle | 状態管理 |
 | Navigation Compose | 最新 | 画面遷移 |
@@ -87,9 +87,12 @@ Arvana-Terra-Android/
 │       │   │       ├── EquipmentModels.kt
 │       │   │       ├── ContractModels.kt
 │       │   │       ├── TaskModels.kt
-│       │   │       ├── ChatModels.kt
 │       │   │       ├── VendorModels.kt
 │       │   │       └── SnsModels.kt
+│       │   ├── model/
+│       │   │   └── Chat.kt             # ChatRoom, ChatMessage, ChatUserRef, CreateChatRoomRequest
+│       │   ├── remote/
+│       │   │   └── ChatApiService.kt   # チャット専用 Retrofit インターフェース（Hilt 提供）
 │       │   ├── local/
 │       │   │   └── TokenDataStore.kt  # DataStore Preferences
 │       │   └── repository/
@@ -136,9 +139,9 @@ Arvana-Terra-Android/
 │           │   ├── EquipmentScreen.kt
 │           │   └── EquipmentViewModel.kt
 │           ├── chat/
-│           │   ├── ChatListScreen.kt
-│           │   ├── ChatDetailScreen.kt
-│           │   └── ChatViewModel.kt
+│           │   ├── ChatListScreen.kt   # チャットルーム一覧・新規作成ダイアログ
+│           │   ├── ChatRoomScreen.kt   # メッセージ表示・送信（3秒ポーリング）
+│           │   └── ChatViewModel.kt    # @HiltViewModel、ポーリング管理
 │           ├── sns/
 │           │   ├── SnsFeedScreen.kt
 │           │   ├── SnsDetailScreen.kt
@@ -331,15 +334,7 @@ interface ApiService {
         @Query("status") status: String? = null
     ): List<Task>
 
-    // チャット
-    @GET("my/properties/{id}/chats")
-    suspend fun getPropertyChats(@Path("id") propertyId: String): List<ChatRoom>
-
-    @GET("chats/{id}/messages")
-    suspend fun getChatMessages(
-        @Path("id") chatId: String,
-        @Query("page") page: Int = 1
-    ): PaginatedResponse<ChatMessage>
+    // ※ チャット API は ChatApiService.kt（別 Retrofit インスタンス）で定義
 
     // タスク
     @POST("tasks")
@@ -366,74 +361,80 @@ interface ApiService {
 
 ---
 
-## Socket.io インテグレーション / Socket.io Integration
+## チャット実装（HTTP ポーリング）
+
+チャット機能は socket.io-client を使用せず、3 秒間隔の HTTP ポーリングで実装しています。`ChatViewModel` が `viewModelScope` 内でループし、`ChatApiService` を通じて最新メッセージを取得します。
 
 ```kotlin
-// socket/SocketManager.kt
+// data/remote/ChatApiService.kt（Hilt で提供）
+interface ChatApiService {
+    @GET("chats")
+    suspend fun getChatRooms(
+        @Query("type") type: String,
+        @Query("targetId") targetId: String
+    ): ApiResponse<List<ChatRoom>>
+
+    @POST("chats")
+    suspend fun createChatRoom(@Body request: CreateChatRoomRequest): ApiResponse<ChatRoom>
+
+    @GET("chats/{id}")
+    suspend fun getChatRoom(@Path("id") id: String): ApiResponse<ChatRoom>
+
+    @GET("chats/{id}/messages")
+    suspend fun getMessages(
+        @Path("id") id: String,
+        @Query("page") page: Int = 1
+    ): ApiResponse<ChatMessagesResponse>
+
+    @POST("chats/{id}/messages")
+    suspend fun sendMessage(
+        @Path("id") id: String,
+        @Body request: SendMessageRequest
+    ): ApiResponse<ChatMessage>
+}
+
+// ui/chat/ChatViewModel.kt
+@HiltViewModel
+class ChatViewModel @Inject constructor(
+    private val chatApiService: ChatApiService
+) : ViewModel() {
+
+    private var pollingJob: Job? = null
+
+    fun startPolling(roomId: String) {
+        pollingJob = viewModelScope.launch {
+            while (isActive) {
+                loadMessages(roomId)
+                delay(3000)
+            }
+        }
+    }
+
+    fun stopPolling() {
+        pollingJob?.cancel()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopPolling()
+    }
+}
+```
+
+### Socket.io（通知用）
+
+プッシュ通知向けに `SocketManager` を保持していますが、チャットには使用しません。
+
+```kotlin
+// socket/SocketManager.kt（通知専用）
 @Singleton
 class SocketManager @Inject constructor(
     private val tokenDataStore: TokenDataStore
 ) {
     private var socket: Socket? = null
 
-    fun connect() {
-        val token = runBlocking { tokenDataStore.getAccessToken() } ?: return
-
-        val opts = IO.Options().apply {
-            auth = mapOf("token" to token)
-            transports = arrayOf("websocket")
-            reconnection = true
-            reconnectionDelay = 1000
-        }
-
-        socket = IO.socket("http://10.0.2.2:3000/chat", opts)
-
-        socket?.on(Socket.EVENT_CONNECT) {
-            Log.d("Socket", "Connected to /chat")
-        }
-
-        socket?.on("new_message") { args ->
-            val data = args[0] as JSONObject
-            // ChatMessage をパースして ViewModel に通知
-            _messageFlow.tryEmit(parseMessage(data))
-        }
-
-        socket?.on("user_typing") { args ->
-            // タイピング通知の処理
-        }
-
-        socket?.connect()
-    }
-
-    fun joinRoom(chatRoomId: String) {
-        socket?.emit("join_chat", chatRoomId)
-    }
-
-    fun leaveRoom(chatRoomId: String) {
-        socket?.emit("leave_chat", chatRoomId)
-    }
-
-    fun sendMessage(chatRoomId: String, content: String) {
-        val data = JSONObject().apply {
-            put("chatRoomId", chatRoomId)
-            put("content", content)
-            put("messageType", "text")
-        }
-        socket?.emit("send_message", data)
-    }
-
-    fun sendTyping(chatRoomId: String) {
-        val data = JSONObject().apply { put("chatRoomId", chatRoomId) }
-        socket?.emit("typing", data)
-    }
-
-    fun disconnect() {
-        socket?.disconnect()
-    }
-
-    // StateFlow でメッセージを流す
-    private val _messageFlow = MutableSharedFlow<ChatMessage>()
-    val messageFlow: SharedFlow<ChatMessage> = _messageFlow
+    fun connect() { /* /notification namespace に接続 */ }
+    fun disconnect() { socket?.disconnect() }
 }
 ```
 
@@ -463,9 +464,9 @@ sealed class Screen(val route: String) {
     object EquipmentList : Screen("properties/{propertyId}/equipment")
     object TaskList : Screen("properties/{propertyId}/tasks")
 
-    // チャット
-    object ChatList : Screen("chats")
-    object ChatDetail : Screen("chats/{chatId}")
+    // チャット（type/targetId/targetName で対象を指定、roomId/roomTitle でルーム遷移）
+    object ChatList : Screen("chat-list/{type}/{targetId}/{targetName}")
+    object ChatRoom : Screen("chat-room/{roomId}/{roomTitle}")
 
     // SNS
     object SnsFeed : Screen("sns")
@@ -495,8 +496,8 @@ sealed class Screen(val route: String) {
 | 部屋詳細 | `properties/{id}/rooms/{rid}` | 部屋・入居者・支払い |
 | 設備一覧 | `properties/{id}/equipment` | カテゴリ別設備リスト |
 | タスク一覧 | `properties/{id}/tasks` | タスク一覧・AI提案 |
-| チャット一覧 | `chats` | 全チャットルーム |
-| チャット詳細 | `chats/{id}` | リアルタイムチャット |
+| チャット一覧 | `chat-list/{type}/{targetId}/{targetName}` | 土地・物件・従業員別チャットルーム一覧 |
+| チャット詳細 | `chat-room/{roomId}/{roomTitle}` | メッセージ表示・送信（3秒 HTTP ポーリング） |
 | SNSフィード | `sns` | 投稿フィード |
 | SNS詳細 | `sns/{id}` | 投稿詳細・コメント |
 | 業者一覧 | `vendors` | 承認済み業者 |
@@ -744,17 +745,17 @@ fun loginScreen_displaysEmailAndPasswordFields() {
                    ├── 土地 (LandListScreen)
                    │    └── LandDetailScreen
                    │         ├── 編集 → LandFormScreen
-                   │         └── チャット → ChatDetailScreen
+                   │         └── チャット → ChatRoomScreen
                    │
                    ├── 物件 (PropertyListScreen)
                    │    └── PropertyDetailScreen
                    │         ├── 部屋 → RoomListScreen → RoomDetailScreen
                    │         ├── 設備 → EquipmentScreen
                    │         ├── タスク → TaskListScreen
-                   │         └── チャット → ChatDetailScreen
+                   │         └── チャット → ChatRoomScreen
                    │
                    ├── チャット (ChatListScreen)
-                   │    └── ChatDetailScreen (Socket.io リアルタイム)
+                   │    └── ChatRoomScreen (3秒 HTTP ポーリング)
                    │
                    ├── SNS (SnsFeedScreen)
                    │    └── SnsDetailScreen

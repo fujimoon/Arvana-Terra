@@ -66,17 +66,15 @@ arvana-terra-web/
 │   │   ├── lands/             # 土地管理ページ
 │   │   ├── properties/        # 物件管理ページ
 │   │   ├── rooms/             # 部屋管理ページ
-│   │   ├── equipment/         # 設備管理ページ
-│   │   ├── contracts/         # 契約書管理ページ
-│   │   ├── tasks/             # タスク管理ページ
 │   │   ├── employees/         # 従業員管理ページ
-│   │   ├── sns/               # SNS ページ
-│   │   ├── vendors/           # 業者ページ
-│   │   ├── opportunities/     # ビジネスチャンスページ
-│   │   ├── valuation/         # 資産価値ページ
-│   │   ├── visualization/     # 分析・可視化ページ
+│   │   ├── chat/              # チャットページ
+│   │   │   ├── ChatListPage.tsx   # チャットルーム一覧（トピック一覧）
+│   │   │   └── ChatRoomPage.tsx   # チャットルーム（リアルタイムメッセージ画面）
+│   │   ├── schedule/          # スケジュール管理ページ
 │   │   ├── settings/          # 設定ページ
 │   │   └── public/            # 公開ページ（認証不要）
+│   ├── hooks/
+│   │   └── useChat.ts         # Socket.io チャットフック（join/send/receive）
 │   ├── store/
 │   │   ├── auth.store.ts      # 認証グローバル状態
 │   │   ├── chat.store.ts      # チャット状態
@@ -124,12 +122,9 @@ arvana-terra-web/
 |-----|---------|------|
 | `/my/lands` | 土地一覧 | 自分の土地一覧（フィルタ・ステータス管理） |
 | `/my/lands/new` | 土地新規作成 | 土地情報入力フォーム |
-| `/my/lands/:id` | 土地詳細 | 土地情報・関連物件・チャット・タスク |
-| `/my/lands/:id/edit` | 土地編集 | 土地情報の編集 |
-| `/my/lands/:id/chats` | 土地チャット | 土地に紐づくチャットルーム一覧 |
-| `/my/lands/:id/chats/:chatId` | チャット詳細 | リアルタイムチャット画面 |
-| `/my/lands/:id/tasks` | 土地タスク | 土地に紐づくタスク一覧 |
-| `/my/lands/:id/contracts` | 土地契約書 | 土地に紐づく契約書一覧 |
+| `/my/lands/:id` | 土地詳細 | 土地情報・サイドバーにチャットリンク |
+| `/my/lands/:id/sale-request` | 売出し申請 | 売出し申請フォーム |
+| `/my/lands/:id/chat?type=land&name=...` | 土地チャット一覧 | トピック一覧・新規作成（`ChatListPage`） |
 
 #### 物件管理 / Property Management
 
@@ -137,18 +132,21 @@ arvana-terra-web/
 |-----|---------|------|
 | `/my/properties` | 物件一覧 | 自分の物件一覧（フィルタ・検索） |
 | `/my/properties/new` | 物件新規作成 | 物件情報入力フォーム |
-| `/my/properties/:id` | 物件詳細 | 物件情報・ダッシュボード（入居率・月次収入） |
-| `/my/properties/:id/edit` | 物件編集 | 物件情報の編集 |
-| `/my/properties/:id/rooms` | 部屋一覧 | 物件内の部屋一覧（フロア別表示） |
-| `/my/properties/:id/rooms/:roomId` | 部屋詳細 | 部屋情報・入居者・支払い履歴 |
-| `/my/properties/:id/equipment` | 設備管理 | 物件内設備一覧 |
-| `/my/properties/:id/equipment/floor/:n` | フロア設備 | フロア別設備マップ |
-| `/my/properties/:id/contracts` | 契約書一覧 | 物件に紐づく契約書 |
-| `/my/properties/:id/contracts/:cId` | 契約書詳細 | 契約書詳細・編集 |
-| `/my/properties/:id/chats` | 物件チャット | 物件に紐づくチャットルーム一覧 |
-| `/my/properties/:id/chats/:chatId` | チャット詳細 | リアルタイムチャット画面 |
-| `/my/properties/:id/tasks` | 物件タスク | 物件に紐づくタスク（AI提案含む） |
-| `/my/properties/:id/employees` | 従業員管理 | 物件に紐づく従業員一覧 |
+| `/my/properties/:id` | 物件詳細 | 物件情報・サイドバーにチャットリンク |
+| `/my/properties/:id/sale-request` | 売出し申請 | 売出し申請フォーム |
+| `/my/properties/:id/chat?type=property&name=...` | 物件チャット一覧 | トピック一覧・新規作成（`ChatListPage`） |
+| `/properties/:propertyId/rooms` | 部屋一覧 | 物件内の部屋一覧 |
+| `/properties/:propertyId/rooms/new` | 部屋新規作成 | 部屋情報入力フォーム |
+| `/properties/:propertyId/rooms/:roomId` | 部屋詳細 | 部屋情報・入居者・支払い履歴 |
+
+#### チャット / Chat
+
+| URL | ページ名 | 説明 |
+|-----|---------|------|
+| `/my/lands/:id/chat` | 土地チャット一覧 | `?type=land&name=...` で絞り込み |
+| `/my/properties/:id/chat` | 物件チャット一覧 | `?type=property&name=...` で絞り込み |
+| `/my/employees/:id/chat` | 従業員チャット一覧 | `?type=employee&name=...` で絞り込み |
+| `/my/chat/:roomId` | チャットルーム | リアルタイムメッセージ画面（Socket.io） |
 
 #### タスク管理 / Task Management
 

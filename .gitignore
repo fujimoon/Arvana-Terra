@@ -21,3 +21,39 @@ yarn-error.log*
 .env.local
 .env.*.local
 coverage/
+
+# Android
+*.iml
+.gradle/
+local.properties
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.dex
+captures/
+keystore.properties
+
+# iOS / Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xccheckout
+*.moved-aside
+*.ipa
+*.dSYM.zip
+*.dSYM
+Pods/
+Carthage/Build/
+.build/
+
+# Sub-projects (managed outside this repo)
+/arvana-terra-admin/
+/Arvana-Terra-Android/
+/arvana-terra-backend/
+/Arvana-Terra-iOS/
+/arvana-terra-web/

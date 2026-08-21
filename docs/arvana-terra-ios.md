@@ -2,9 +2,9 @@
 
 ## 概要 / Overview
 
-Arvana Terra の iPhone/iPad 向けネイティブ iOS アプリです。Swift/SwiftUI で構築され、MVVM アーキテクチャを採用しています。URLSession による REST API 通信と URLSessionWebSocketTask による Socket.io 互換の WebSocket 通信を実装しています。
+Arvana Terra の iPhone/iPad 向けネイティブ iOS アプリです。Swift/SwiftUI で構築され、MVVM アーキテクチャを採用しています。URLSession による REST API 通信を実装しています。チャット機能は 3 秒間隔の HTTP ポーリングで実現しており、サードパーティ Socket.io クライアントへの依存なしに動作します。
 
-Native iOS app for Arvana Terra. Built with Swift/SwiftUI using MVVM architecture. Implements REST API communication via URLSession and Socket.io-compatible WebSocket communication via URLSessionWebSocketTask.
+Native iOS app for Arvana Terra. Built with Swift/SwiftUI using MVVM architecture. Implements REST API communication via URLSession. Chat feature uses 3-second HTTP polling (no third-party Socket.io client required).
 
 ---
 
@@ -15,7 +15,7 @@ Native iOS app for Arvana Terra. Built with Swift/SwiftUI using MVVM architectur
 | Swift | 5.9 | プログラミング言語 |
 | SwiftUI | iOS 17 SDK | UI フレームワーク |
 | URLSession | Foundation | REST API HTTP クライアント |
-| URLSessionWebSocketTask | Foundation | WebSocket / Socket.io |
+| URLSessionWebSocketTask | Foundation | WebSocket（通知用） ※チャットは HTTP ポーリング |
 | Combine | Foundation | リアクティブプログラミング |
 | SwiftData / @State/@ObservableObject | Swift | 状態管理 |
 | SF Symbols | 5.x | アイコンシステム |
@@ -63,7 +63,7 @@ Arvana-Terra-iOS/
     │   ├── Contract.swift             # Contract, ContractType, ContractStatus
     │   ├── Task.swift                 # Task, TaskStatus, TaskPriority
     │   ├── Employee.swift             # Employee
-    │   ├── ChatRoom.swift             # ChatRoom, ChatMessage, ChatParticipant
+    │   ├── Chat.swift                 # ChatRoom, ChatMessage, ChatUserRef, CreateChatRoomRequest
     │   ├── Vendor.swift               # Vendor, VendorCategory
     │   ├── SnsPost.swift              # SnsPost, SnsComment, PostType
     │   ├── AssetValuation.swift       # AssetValuation, ValuationPrediction
@@ -101,10 +101,11 @@ Arvana-Terra-iOS/
         │   ├── LandListView.swift
         │   ├── LandDetailView.swift
         │   ├── LandFormView.swift
-        │   └── LandChatView.swift
+        │   └── LandManageView.swift    # チャットリンク追加済み
         ├── Property/
         │   ├── PropertyListView.swift
         │   ├── PropertyDetailView.swift
+        │   ├── PropertyManageView.swift # チャットリンク追加済み
         │   ├── RoomListView.swift
         │   ├── RoomDetailView.swift
         │   └── PropertyTaskView.swift
@@ -112,8 +113,8 @@ Arvana-Terra-iOS/
         │   ├── EquipmentListView.swift
         │   └── SmartDeviceView.swift
         ├── Chat/
-        │   ├── ChatRoomListView.swift
-        │   └── ChatDetailView.swift
+        │   ├── ChatListView.swift         # チャットルーム一覧・新規作成モーダル
+        │   └── ChatRoomView.swift         # メッセージ表示・送信（3秒 HTTP ポーリング）
         ├── SNS/
         │   ├── SnsFeedView.swift
         │   └── SnsPostDetailView.swift
@@ -319,76 +320,49 @@ func authenticatedRequest(url: URL, method: String = "GET") throws -> URLRequest
 
 ---
 
-## Socket.io / WebSocket 実装
+## チャット実装（HTTP ポーリング）
+
+チャット機能はサードパーティの Socket.io クライアントを使用せず、3 秒間隔の HTTP ポーリングで実装しています。これにより SPM の追加依存なしに動作します。
 
 ```swift
-// Services/WebSocketService.swift
-class WebSocketService: ObservableObject {
-    private var webSocketTask: URLSessionWebSocketTask?
-    private let wsURL = AppConfig.wsURL
+// Services/ChatService.swift
+class ChatService {
+    func getChatRooms(type: String, targetId: String) async throws -> [ChatRoom] { ... }
+    func createChatRoom(type: String, title: String, description: String?, targetId: String) async throws -> ChatRoom { ... }
+    func getChatRoom(id: String) async throws -> ChatRoom { ... }
+    func getMessages(roomId: String, page: Int) async throws -> ChatMessagesResponse { ... }
+    func sendMessage(roomId: String, content: String) async throws -> ChatMessage { ... }
+}
 
-    @Published var receivedMessages: [ChatMessage] = []
-    @Published var isConnected = false
+// Views/Chat/ChatRoomView.swift（3秒ポーリング）
+struct ChatRoomView: View {
+    @State private var pollingTask: Task<Void, Never>? = nil
 
-    func connect() {
-        guard let token = TokenManager.shared.accessToken,
-              let url = URL(string: "\(wsURL)/chat") else { return }
-
-        // Socket.io ハンドシェイクパラメータ
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
-        components.queryItems = [
-            URLQueryItem(name: "EIO", value: "4"),
-            URLQueryItem(name: "transport", value: "websocket"),
-            URLQueryItem(name: "auth", value: token)
-        ]
-
-        let session = URLSession(configuration: .default)
-        webSocketTask = session.webSocketTask(with: components.url!)
-        webSocketTask?.resume()
-        isConnected = true
-        receiveMessages()
-    }
-
-    private func receiveMessages() {
-        webSocketTask?.receive { [weak self] result in
-            switch result {
-            case .success(let message):
-                switch message {
-                case .string(let text):
-                    self?.handleMessage(text)
-                case .data(let data):
-                    self?.handleData(data)
-                @unknown default: break
-                }
-                self?.receiveMessages()
-            case .failure:
-                self?.isConnected = false
+    func startPolling() {
+        pollingTask = Task {
+            while !Task.isCancelled {
+                await loadMessages()
+                try? await Task.sleep(nanoseconds: 3_000_000_000) // 3秒
             }
         }
     }
 
-    func sendMessage(chatRoomId: String, content: String) {
-        let payload: [String: Any] = [
-            "chatRoomId": chatRoomId,
-            "content": content,
-            "messageType": "text"
-        ]
-        if let data = try? JSONSerialization.data(withJSONObject: payload),
-           let text = String(data: data, encoding: .utf8) {
-            let message = URLSessionWebSocketTask.Message.string("42[\"send_message\",\(text)]")
-            webSocketTask?.send(message) { _ in }
-        }
-    }
+    // onDisappear でキャンセル
+    .onDisappear { pollingTask?.cancel() }
+}
+```
 
-    func joinRoom(chatRoomId: String) {
-        let message = URLSessionWebSocketTask.Message.string("42[\"join_chat\",\"\(chatRoomId)\"]")
-        webSocketTask?.send(message) { _ in }
-    }
+### Socket.io（通知用 WebSocket）
 
-    func disconnect() {
-        webSocketTask?.cancel(with: .normalClosure, reason: nil)
-        isConnected = false
-    }
+プッシュ通知など即時性が必要な機能向けに `WebSocketService` を保持しています（チャットには使用しません）。
+
+```swift
+// Services/WebSocketService.swift（通知専用）
+class WebSocketService: ObservableObject {
+    private var webSocketTask: URLSessionWebSocketTask?
+
+    func connect() { /* URLSessionWebSocketTask で /notification namespace に接続 */ }
+    func disconnect() { webSocketTask?.cancel(with: .normalClosure, reason: nil) }
 }
 ```
 
@@ -603,7 +577,7 @@ ContentView
                    │           ↓ 選択
                    │         LandDetailView
                    │           ├── 編集 → LandFormView
-                   │           ├── チャット → ChatRoomListView → ChatDetailView
+                   │           ├── チャット → ChatListView → ChatRoomView
                    │           └── タスク → TaskListView
                    │
                    ├── Tab 3: 物件 (PropertyListView)
@@ -611,12 +585,12 @@ ContentView
                    │         PropertyDetailView
                    │           ├── 部屋 → RoomListView → RoomDetailView
                    │           ├── 設備 → EquipmentListView
-                   │           ├── チャット → ChatRoomListView → ChatDetailView
+                   │           ├── チャット → ChatListView → ChatRoomView
                    │           └── タスク → TaskListView
                    │
-                   ├── Tab 4: チャット (ChatRoomListView)
+                   ├── Tab 4: チャット (ChatListView)
                    │           ↓
-                   │         ChatDetailView (リアルタイム)
+                   │         ChatRoomView (リアルタイム)
                    │
                    ├── Tab 5: SNS (SnsFeedView)
                    │           ↓
